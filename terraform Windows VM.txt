@@ -1,0 +1,97 @@
+terraform {
+    required_providers {
+        azurerm = {
+            source = "hashicorp/azurerm"
+            version = "3.48.0"
+        }
+    }
+}
+
+
+ provider "azurerm" {
+    features {}
+
+     subscription_id = "e2acb962-6d0f-48cb-b922-dfc6a96e4ba6"
+     client_id = "60d6b789-baa7-4427-acea-7479b3228c46"
+     tenant_id  = "2e060104-3b6f-4fee-8947-754319255211"
+     client_secret = "By38Q~U9Z6SeCyRw8Tyiv.s2kzK3rMC5YFS8OdvJ"
+ }
+
+    resource "azurerm_resource_group" "shannurg" {
+        name = "terraformRG"
+        location = "eastus"
+ }
+    resource "azurerm_virtual_network" "shannuvnet" {
+        name                 = "shannuvnet1"
+        location             = azurerm_resource_group.shannurg.location
+        resource_group_name  = azurerm_resource_group.shannurg.name
+        address_space        = ["10.10.0.0/16"]
+    }
+
+    resource "azurerm_subnet" "rgsubnet" {
+        name                   =   "subnet01"
+        resource_group_name    =   azurerm_resource_group.shannurg.name
+        virtual_network_name   =   azurerm_virtual_network.shannuvnet.name
+        address_prefixes       =   ["10.10.1.0/24"]
+    }
+
+    resource "azurerm_network_security_group" "nsg1" {
+            name                = "nsg11"
+            location            = azurerm_resource_group.shannurg.location
+            resource_group_name = azurerm_resource_group.shannurg.name
+}
+
+resource "azurerm_network_security_rule" "rdp" {
+  name                        = "rdp"
+  priority                    = 100
+  direction                   = "Inbound"
+  access                      = "Allow"
+  protocol                    = "Tcp"
+  source_port_range           = "*"
+  destination_port_range      = "3389"
+  source_address_prefix       = "*"
+  destination_address_prefix  = "*"
+  resource_group_name         = azurerm_resource_group.shannurg.name
+  network_security_group_name = azurerm_network_security_group.nsg1.name
+}
+
+resource "azurerm_subnet_network_security_group_association" "nsgassociationsubnet" {
+  subnet_id                 = azurerm_subnet.rgsubnet.id
+  network_security_group_id = azurerm_network_security_group.nsg1.id
+}
+
+resource "azurerm_network_interface" "nic1" {
+  name                = "nic11"
+  location            = azurerm_resource_group.shannurg.location
+  resource_group_name = azurerm_resource_group.shannurg.name
+
+  ip_configuration {
+    name                          = "internal"
+    subnet_id                     = azurerm_subnet.rgsubnet.id
+    private_ip_address_allocation = "Dynamic"
+  }
+}
+
+resource "azurerm_windows_virtual_machine" "winvm" {
+  name                = "windowsmachine"
+  resource_group_name = azurerm_resource_group.shannurg.name
+  location            = azurerm_resource_group.shannurg.location
+  size                = "Standard_B1s"
+  admin_username      = "demo"
+  admin_password      = "Shannu@12345"
+  network_interface_ids = [
+    azurerm_network_interface.nic1.id,
+  ]
+
+  os_disk {
+    caching              = "ReadWrite"
+    storage_account_type = "Standard_LRS"
+  }
+
+  source_image_reference {
+    publisher = "MicrosoftWindowsServer"
+    offer     = "WindowsServer"
+    sku       = "2016-Datacenter"
+    version   = "latest"
+  }
+}
